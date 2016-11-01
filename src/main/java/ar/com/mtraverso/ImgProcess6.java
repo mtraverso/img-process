@@ -69,7 +69,7 @@ public class ImgProcess6 {
 
 
         VideoCapture videoCapture = new VideoCapture();
-        videoCapture.open("video.mp4");
+        videoCapture.open("CarsDrivingUnderBridge.mp4");
 
         int index = 0;
 

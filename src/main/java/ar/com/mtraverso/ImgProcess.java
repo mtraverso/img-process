@@ -60,7 +60,7 @@ public class ImgProcess {
 
     public void initCapture(){
         VideoCapture capt = new VideoCapture();
-        capt.open(0);
+        capt.open("CarsDrivingUnderBridge.mp4");
         Mat frame = new Mat();
         capt.read(frame);
         Mat smaller = new Mat();

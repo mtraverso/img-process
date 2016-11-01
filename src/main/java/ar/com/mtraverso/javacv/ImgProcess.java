@@ -1,25 +1,18 @@
 package ar.com.mtraverso.javacv;
 
-import org.bytedeco.javacpp.opencv_core.*;
-import org.bytedeco.javacpp.opencv_videoio.VideoCapture;
-import org.bytedeco.javacv.Frame;
-import org.bytedeco.javacv.Java2DFrameConverter;
-import org.bytedeco.javacv.OpenCVFrameConverter;
 
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 
-import static org.bytedeco.javacpp.opencv_core.*;
-import static org.bytedeco.javacpp.opencv_imgproc.*;
 
 /**
  * Created by mtraverso on 10/24/16.
  */
 public class ImgProcess {
 
-    JFrame frame;
+    /*JFrame frame;
     JPanel panel;
     JLabel label;
 
@@ -110,5 +103,5 @@ public class ImgProcess {
         Frame frame = grabberConverter.convert(src);
         return paintConverter.getBufferedImage(frame,1);
     }
-
+*/
 }
