@@ -7,17 +7,21 @@ import org.opencv.core.Point;
 import org.opencv.highgui.Highgui;
 import org.opencv.highgui.VideoCapture;
 import org.opencv.imgproc.Imgproc;
+import org.opencv.video.Video;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
+import java.math.BigDecimal;
+import java.util.*;
 import java.util.List;
-import java.util.Properties;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Created by matias on 31/10/16.
@@ -34,28 +38,50 @@ public class CarCounter {
     private static Scalar SCALAR_GREEN = new Scalar(0.0, 200.0, 0.0);
     private static Scalar SCALAR_RED = new Scalar(0.0, 0.0, 255.0);
 
-    private static int carCount = 0;
+    public CarCounter(boolean repeat){
+        this.repeat = repeat;
+    }
 
-    public static void main(String[] args) throws IOException{
+    private boolean repeat;
 
-        Properties prop = new Properties();
-        InputStream input = new FileInputStream("app.properties");
+    private int carCount = 0;
 
-        // load a properties file
-        prop.load(input);
+    private Image image;
+
+    private boolean running;
 
 
-        String videoName = prop.getProperty("video.filename");
-        String position = prop.getProperty("line.position");
-        String orientation = prop.getProperty("line.orientation");
-        String movement = prop.getProperty("movement");
+    public Image getImage() {
+        return image;
+    }
 
-        JFrame frame = new JFrame();
-        frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-        JPanel panel = new JPanel();
-        JLabel label = new JLabel();
-        frame.getContentPane().add(panel);
-        panel.add(label);
+    public void setImage(Image image) {
+        this.image = image;
+    }
+
+    public boolean isRunning() {
+        return running;
+    }
+
+    public void setRunning(boolean running) {
+        this.running = running;
+    }
+
+    public void setCarCount(int carCount){
+        this.carCountByMovement.put("increasing",carCount);
+        this.carCountByMovement.put("decreasing",carCount);
+    }
+
+    public int getCarCount(String direction){
+        return this.carCountByMovement.get(direction);
+    }
+
+    Map<String,Integer> carCountByMovement = new HashMap<String, Integer>();
+
+    public void initCapture(String videoName,String orientation, String position) throws InterruptedException {
+
+        carCountByMovement.put("increasing",0);
+        carCountByMovement.put("decreasing",0);
 
         VideoCapture cap = new VideoCapture();
 
@@ -74,33 +100,39 @@ public class CarCounter {
         cap.read(imgFrame1);
         cap.read(imgFrame2);
 
-        frame.setPreferredSize(new Dimension(imgFrame1.width(),imgFrame1.height()));
-        frame.setVisible(true);
-        frame.pack();
+
 
         Long intHorizontalLinePosition = Math.round((double)Double.valueOf(position));
 
-        Point p1 = null,p2= null ;
+        Point p11 = null,p12= null ;
         if(orientation.equals("horizontal")){
-            p1 = new Point(0,Double.valueOf(position));
-            p2 = new Point(imgFrame1.cols()-1,Double.valueOf(position));
+            p11 = new Point(0,Double.valueOf(position));
+            p12 = new Point(imgFrame1.cols()-1,Double.valueOf(position));
         }else if (orientation.equals("vertical")){
-            p1 = new Point(Double.valueOf(position),0);
-            p2 = new Point(Double.valueOf(position),imgFrame1.rows()-1);
+            p11 = new Point(Double.valueOf(position),0);
+            p12 = new Point(Double.valueOf(position),imgFrame1.rows()-1);
         }
 
-        crossingLine[0] = p1;
-        crossingLine[1] = p2;
+        crossingLine[0] = p11;
+        crossingLine[1] = p12;
+
 
         int frameCount = 2;
 
         boolean blnFirstFrame = true;
-
-        while(cap.isOpened()){
+        while(running){
             List<Blob> currentFrameBlobs= new ArrayList<Blob>();
 
             Mat imgFrame1Copy = imgFrame1.clone();
             Mat imgFrame2Copy = imgFrame2.clone();
+            if(repeat) {
+                if (frameCount==(int)cap.get(7)) {
+                    frameCount = 2;
+                    cap.set(1, 2);
+                    Thread.sleep(500);
+                    continue;
+                }
+            }
 
             Mat imgDifference = new Mat();
             Mat imgThresh = new Mat();
@@ -146,8 +178,10 @@ public class CarCounter {
             }
 
 
+            int id = 0;
+
             for (MatOfPoint ch : contours) {
-                Blob possibleBlob = new Blob(ch);
+                Blob possibleBlob = new Blob(ch,id++);
 
                 if (possibleBlob.currentBoundingRect.area() > 400 &&
                         possibleBlob.dblCurrentAspectRatio > 0.2 &&
@@ -173,8 +207,7 @@ public class CarCounter {
 
             drawBlobInfoOnImage(blobs, imgFrame2Copy);
 
-            boolean blnAtLeastOneBlobCrossedTheLine = checkIfBlobsCrossedTheLine(blobs, intHorizontalLinePosition.intValue(),orientation,movement);
-
+            boolean blnAtLeastOneBlobCrossedTheLine = checkIfBlobsCrossedTheLine(blobs, intHorizontalLinePosition.intValue(),orientation,true);
             if (blnAtLeastOneBlobCrossedTheLine == true) {
                 Core.line(imgFrame2Copy, crossingLine[0], crossingLine[1], SCALAR_GREEN, 2);
             }
@@ -184,7 +217,7 @@ public class CarCounter {
 
             drawCarCountOnImage(carCount, imgFrame2Copy);
 
-            label.setIcon(new ImageIcon(toBufferedImage(imgFrame2Copy)));
+            image = toBufferedImage(imgFrame2Copy);
 
             //cv::waitKey(0);                 // uncomment this line to go frame by frame for debugging
 
@@ -198,13 +231,12 @@ public class CarCounter {
 
             blnFirstFrame = false;
             frameCount++;
-
-
         }
 
     }
 
-    public static Image toBufferedImage(Mat m){
+
+    private Image toBufferedImage(Mat m){
         int type = BufferedImage.TYPE_BYTE_GRAY;
         if ( m.channels() > 1 ) {
             type = BufferedImage.TYPE_3BYTE_BGR;
@@ -219,7 +251,7 @@ public class CarCounter {
 
     }
 
-    static void matchCurrentFrameBlobsToExistingBlobs(List<Blob> existingBlobs, List<Blob> currentFrameBlobs) {
+    private void matchCurrentFrameBlobsToExistingBlobs(List<Blob> existingBlobs, List<Blob> currentFrameBlobs) {
 
         for (Blob existingBlob : existingBlobs) {
 
@@ -271,7 +303,7 @@ public class CarCounter {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    static void addBlobToExistingBlobs(Blob currentFrameBlob, List<Blob> existingBlobs, int intIndex) {
+    private void addBlobToExistingBlobs(Blob currentFrameBlob, List<Blob> existingBlobs, int intIndex) {
 
         existingBlobs.get(intIndex).currentContour = currentFrameBlob.currentContour;
         existingBlobs.get(intIndex).currentBoundingRect = currentFrameBlob.currentBoundingRect;
@@ -286,7 +318,7 @@ public class CarCounter {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    static void addNewBlob(Blob currentFrameBlob, List<Blob> existingBlobs) {
+    private void addNewBlob(Blob currentFrameBlob, List<Blob> existingBlobs) {
 
         currentFrameBlob.blnCurrentMatchFoundOrNewBlob = true;
 
@@ -294,7 +326,7 @@ public class CarCounter {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    static double distanceBetweenPoints(Point point1, Point point2) {
+    private double distanceBetweenPoints(Point point1, Point point2) {
 
         double intX = Math.abs(point1.x - point2.x);
         double intY = Math.abs(point1.y - point2.y);
@@ -303,7 +335,7 @@ public class CarCounter {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    static void drawAndShowContours(Size imageSize, List<MatOfPoint > contours, String strImageName) {
+    private void drawAndShowContours(Size imageSize, List<MatOfPoint > contours, String strImageName) {
         Mat image = new Mat(imageSize, CvType.CV_8UC3, SCALAR_BLACK);
 
         Imgproc.drawContours(image, contours, -1, SCALAR_WHITE, -1);
@@ -322,7 +354,7 @@ public class CarCounter {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    static void drawAndShowContoursBlob(Size imageSize, List<Blob> blobs, String strImageName) {
+    private void drawAndShowContoursBlob(Size imageSize, List<Blob> blobs, String strImageName) {
 
         Mat image = new Mat(imageSize, CvType.CV_8UC3, SCALAR_BLACK);
 
@@ -349,7 +381,7 @@ public class CarCounter {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    static boolean checkIfBlobsCrossedTheLine(List<Blob> blobs, int intHorizontalLinePosition,String orientation,String movement) {
+    private boolean checkIfBlobsCrossedTheLine(List<Blob> blobs, int intHorizontalLinePosition,String orientation,boolean doCount) {
         boolean blnAtLeastOneBlobCrossedTheLine = false;
 
         for (Blob blob : blobs) {
@@ -359,29 +391,29 @@ public class CarCounter {
                 int currFrameIndex = (int)blob.centerPositions.size() - 1;
 
                 if(orientation.equals("vertical")){
-                    if(movement.equals("increasing")) {
+                    //if(movement.equals("decreasing")) {
                         if (blob.centerPositions.get(prevFrameIndex).x > intHorizontalLinePosition && blob.centerPositions.get(currFrameIndex).x <= intHorizontalLinePosition) {
-                            carCount++;
-                            blnAtLeastOneBlobCrossedTheLine = true;
+                            blnAtLeastOneBlobCrossedTheLine = count(blob.id,doCount);
+                            carCountByMovement.put("decreasing",carCountByMovement.get("decreasing")+1);
                         }
-                    }else if (movement.equals("decreasing")){
+                    //}else if (movement.equals("increasing")){
                         if (blob.centerPositions.get(prevFrameIndex).x < intHorizontalLinePosition && blob.centerPositions.get(currFrameIndex).x >= intHorizontalLinePosition) {
-                            carCount++;
-                            blnAtLeastOneBlobCrossedTheLine = true;
+                            blnAtLeastOneBlobCrossedTheLine = count(blob.id,doCount);
+                            carCountByMovement.put("increasing",carCountByMovement.get("increasing")+1);
                         }
-                    }
+                    //}
                 }else if(orientation.equals("horizontal")) {
-                    if(movement.equals("increasing")) {
+                    //if(movement.equals("increasing")) {
                         if (blob.centerPositions.get(prevFrameIndex).y > intHorizontalLinePosition && blob.centerPositions.get(currFrameIndex).y <= intHorizontalLinePosition) {
-                            carCount++;
-                            blnAtLeastOneBlobCrossedTheLine = true;
+                            blnAtLeastOneBlobCrossedTheLine = count(blob.id,doCount);
+                            carCountByMovement.put("increasing",carCountByMovement.get("increasing")+1);
                         }
-                    }else if (movement.equals("decreasing")){
+                    //}else if (movement.equals("decreasing")){
                         if (blob.centerPositions.get(prevFrameIndex).y < intHorizontalLinePosition && blob.centerPositions.get(currFrameIndex).y >= intHorizontalLinePosition) {
-                            carCount++;
-                            blnAtLeastOneBlobCrossedTheLine = true;
+                            blnAtLeastOneBlobCrossedTheLine = count(blob.id,doCount);
+                            carCountByMovement.put("decreasing",carCountByMovement.get("decreasing")+1);
                         }
-                    }
+                    //}
                 }
             }
 
@@ -390,8 +422,25 @@ public class CarCounter {
         return blnAtLeastOneBlobCrossedTheLine;
     }
 
+    private Map<Integer,Long> timesPerBlob = new HashMap<Integer,Long>();
+    private long time = 1l;
+
+    private boolean count(int blobId,boolean doCount) {
+        boolean blnAtLeastOneBlobCrossedTheLine = true;;
+        if(doCount) {
+            carCount++;
+            long start = System.currentTimeMillis();
+            timesPerBlob.put(blobId,start);
+        }else{
+            long end = System.currentTimeMillis();
+            time = end - timesPerBlob.get(blobId);
+        }
+
+        return blnAtLeastOneBlobCrossedTheLine;
+    }
+
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    static void drawBlobInfoOnImage(List<Blob> blobs, Mat imgFrame2Copy) {
+     void drawBlobInfoOnImage(List<Blob> blobs, Mat imgFrame2Copy) {
 
         for (int i = 0; i < blobs.size(); i++) {
 
@@ -408,20 +457,31 @@ public class CarCounter {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    static void drawCarCountOnImage(int carCount, Mat imgFrame2Copy) {
+     void drawCarCountOnImage(int carCount, Mat imgFrame2Copy) {
 
         int intFontFace = Core.FONT_HERSHEY_SIMPLEX;
         double dblFontScale = (imgFrame2Copy.rows() * imgFrame2Copy.cols()) / 300000.0;
         int intFontThickness = (int)Math.round(dblFontScale * 1.5);
 
-        Size textSize = Core.getTextSize(String.valueOf(carCount), intFontFace, dblFontScale, intFontThickness, new int[]{0});
+        //Size textSize = Core.getTextSize(String.valueOf(carCount), intFontFace, dblFontScale, intFontThickness, new int[]{0});
 
-        Point ptTextBottomLeftPosition = new Point();
+         Size textSizeDec = Core.getTextSize(String.valueOf(carCountByMovement.get("decreasing")), intFontFace, dblFontScale, intFontThickness, new int[]{0});
+         Size textSizeInc = Core.getTextSize(String.valueOf(carCountByMovement.get("increasing")), intFontFace, dblFontScale, intFontThickness, new int[]{0});
 
-        ptTextBottomLeftPosition.x = imgFrame2Copy.cols() - 1 - (int)((double)textSize.width * 1.25);
-        ptTextBottomLeftPosition.y = (int)((double)textSize.height * 1.25);
+        Point ptTextBottomLeftPositionInc = new Point();
 
-        Core.putText(imgFrame2Copy, String.valueOf(carCount), ptTextBottomLeftPosition, intFontFace, dblFontScale, SCALAR_GREEN, intFontThickness);
+        ptTextBottomLeftPositionInc.x = imgFrame2Copy.cols() - 1 - (int)((double)textSizeInc.width * 1.25);
+        ptTextBottomLeftPositionInc.y = (int)((double)textSizeInc.height * 1.25);
+
+         Point ptTextBottomLeftPositionDec = new Point();
+
+         ptTextBottomLeftPositionDec.x = 1;
+         ptTextBottomLeftPositionDec.y = (int)((double)textSizeDec.height * 1.25);
+
+
+        Core.putText(imgFrame2Copy, String.valueOf(carCountByMovement.get("increasing")), ptTextBottomLeftPositionInc, intFontFace, dblFontScale, SCALAR_GREEN, intFontThickness);
+         Core.putText(imgFrame2Copy, String.valueOf(carCountByMovement.get("decreasing")), ptTextBottomLeftPositionDec, intFontFace, dblFontScale, SCALAR_RED, intFontThickness);
 
     }
+
 }

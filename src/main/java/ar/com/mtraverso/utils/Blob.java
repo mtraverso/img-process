@@ -31,8 +31,11 @@ public class Blob {
 
     public Point predictedNextPosition;
 
+    public int id;
 
-    public Blob(MatOfPoint contour){
+
+    public Blob(MatOfPoint contour, int id){
+        this.id = id;
         currentContour = contour;
         currentBoundingRect = Imgproc.boundingRect(contour);
         Point currentCenter = new Point();

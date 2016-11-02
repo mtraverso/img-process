@@ -1,0 +1,34 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta http-equiv="Content-type" content="text/html; charset=utf-8">
+    <title>WebSocket Test</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.6.4/jquery.min.js" type="text/javascript" charset="utf-8"></script>
+    <script type="text/javascript" charset="utf-8">
+        function ready() {
+            var ws = new WebSocket("ws://localhost:8080/image");
+
+            ws.onopen = function () {
+                ws.send('img');
+            };
+
+            ws.onerror = function (e) {
+            };
+
+            ws.onerror = function (error) {
+            };
+
+            var img;
+            ws.onmessage = function (e) {
+                $("#image").attr('src',  'data:image/jpg;base64,'+e.data);
+                ws.send('img');
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", ready, false);
+    </script>
+</head>
+<body>
+<img id="image" src="" width="640" height="480"/>
+</body>
+</html>
