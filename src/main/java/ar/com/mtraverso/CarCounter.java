@@ -522,13 +522,13 @@ public class CarCounter implements Observable {
 
         Point ptTextBottomLeftPositionInc = new Point();
 
-        ptTextBottomLeftPositionInc.x = imgFrame2Copy.cols() - 1 - (int)((double)textSizeInc.width * 1.25);
-        ptTextBottomLeftPositionInc.y = (int)((double)textSizeInc.height * 1.25);
+        ptTextBottomLeftPositionInc.x = imgFrame2Copy.cols() - 250 - (int)((double)textSizeInc.width );
+        ptTextBottomLeftPositionInc.y = (int)((double)textSizeInc.height * 1.50);
 
          Point ptTextBottomLeftPositionDec = new Point();
 
          ptTextBottomLeftPositionDec.x = 1;
-         ptTextBottomLeftPositionDec.y = (int)((double)textSizeDec.height * 1.25);
+         ptTextBottomLeftPositionDec.y = (int)((double)textSizeDec.height * 1.50);
 
 
         Core.putText(imgFrame2Copy, String.valueOf(carCountByMovement.get("increasing")), ptTextBottomLeftPositionInc, intFontFace, dblFontScale, SCALAR_GREEN, intFontThickness);

@@ -38,8 +38,8 @@ public class SwingCarCounter implements Observer {
 
         final String videoName = prop.getProperty("video.filename");
         String position = prop.getProperty("line.position");
-        String focalLength = prop.getProperty("camera.focal.length");
-        String fpsStr = prop.getProperty("camera.frames.per.second");
+        final String focalLength = prop.getProperty("camera.focal.length");
+        final String fpsStr = prop.getProperty("camera.frames.per.second");
 
 
         if(position == null){
@@ -108,7 +108,7 @@ public class SwingCarCounter implements Observer {
         JButton stop = new JButton(new AbstractAction("Stop") {
             public void actionPerformed(ActionEvent e) {
                 counter.setRunning(false);
-
+                ((DefaultListModel)list.getModel()).removeAllElements();
                 runningIcon = false;
             }
         });
@@ -185,13 +185,15 @@ public class SwingCarCounter implements Observer {
 
 
 
-        JPanel eastPanel = new JPanel();
-        list = new ImageList(5);
-        eastPanel.add(list);
+        list = new ImageList(4);
+        JScrollPane eastPanel = new JScrollPane(list);
+        list.setBackground(frame.getBackground());
+
+
+        list.setPreferredSize(new Dimension(40,eastPanel.getHeight()));
 
         panel.add(eastPanel,BorderLayout.EAST);
         eastPanel.setVisible(true);
-        list.setVisible(true);
 
 
         frame.setPreferredSize(Toolkit.getDefaultToolkit().getScreenSize());
@@ -218,9 +220,7 @@ public class SwingCarCounter implements Observer {
     static Runnable iconThread;
     private static boolean runningIcon = true;
 
-    @Override
     public void update(Image i) {
-        ((ImageList.ImageListModel)list.getModel()).addElement(i);
-        list.repaint();
+        list.add(i);
     }
 }

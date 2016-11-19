@@ -65,7 +65,7 @@ public class GetFocalLength {
         MatOfPoint2f approx = new MatOfPoint2f();
         Imgproc.approxPolyDP(maxMat,approx,0,true);
         approx.convertTo(pt,CvType.CV_32S);
-        List<MatOfPoint> contourTemp = new ArrayList<>();
+        List<MatOfPoint> contourTemp = new ArrayList<MatOfPoint>();
         contourTemp.add(pt);
 
         Rect rect = Imgproc.boundingRect(pt);
