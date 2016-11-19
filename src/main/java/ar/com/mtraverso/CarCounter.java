@@ -1,32 +1,32 @@
 package ar.com.mtraverso;
 
+import ar.com.mtraverso.observable.*;
+import ar.com.mtraverso.observable.Observable;
+import ar.com.mtraverso.observable.Observer;
 import ar.com.mtraverso.utils.Blob;
+import jersey.repackaged.com.google.common.base.Stopwatch;
 import nu.pattern.OpenCV;
 import org.opencv.core.*;
 import org.opencv.core.Point;
 import org.opencv.highgui.Highgui;
 import org.opencv.highgui.VideoCapture;
 import org.opencv.imgproc.Imgproc;
-import org.opencv.video.Video;
 
-import javax.swing.*;
+import javax.imageio.ImageIO;
 import java.awt.*;
-import java.awt.event.ActionEvent;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.math.BigDecimal;
 import java.util.*;
 import java.util.List;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Created by matias on 31/10/16.
  */
-public class CarCounter {
+public class CarCounter implements Observable {
 
     static
     {
@@ -38,7 +38,16 @@ public class CarCounter {
     private static Scalar SCALAR_GREEN = new Scalar(0.0, 200.0, 0.0);
     private static Scalar SCALAR_RED = new Scalar(0.0, 0.0, 255.0);
 
-    public CarCounter(boolean repeat){
+    private static CarCounter instance;
+
+    public static CarCounter getInstance(boolean repeat){
+        if(instance == null){
+            instance = new CarCounter(repeat);
+        }
+        return instance;
+    }
+
+    private CarCounter(boolean repeat){
         this.repeat = repeat;
     }
 
@@ -50,6 +59,7 @@ public class CarCounter {
 
     private boolean running;
 
+    private String orientation="horizontal";
 
     public Image getImage() {
         return image;
@@ -67,6 +77,8 @@ public class CarCounter {
         this.running = running;
     }
 
+
+
     public void setCarCount(int carCount){
         this.carCountByMovement.put("increasing",carCount);
         this.carCountByMovement.put("decreasing",carCount);
@@ -78,7 +90,34 @@ public class CarCounter {
 
     Map<String,Integer> carCountByMovement = new HashMap<String, Integer>();
 
-    public void initCapture(String videoName,String orientation, String position) throws InterruptedException {
+    Point[] crossingLine = new Point[2];
+    //Point[] crossingLine2 = new Point[2];
+    double linePosition;
+    //double linePosition2;
+    double frameCols;
+    double frameRows;
+
+    int fps;
+
+    double avgRealWidth;
+    double focalLength;
+    private List<BufferedImage> images = new ArrayList<BufferedImage>();
+
+    public void initCapture(String videoName,String orientation, String position, double focalLength, int fps) throws InterruptedException {
+        this.orientation = orientation;
+        this.focalLength = focalLength;
+        this.fps = fps;
+
+        Properties props = new Properties();
+        try {
+            props.load(new FileInputStream("app.properties"));
+            avgRealWidth = Double.valueOf(props.getProperty("avg.object.width"));
+        }catch (IOException ioe){
+            ioe.printStackTrace();
+        }
+
+        Stopwatch stopwatch = new Stopwatch();
+        stopwatch.start();
 
         carCountByMovement.put("increasing",0);
         carCountByMovement.put("decreasing",0);
@@ -95,14 +134,22 @@ public class CarCounter {
 
         List<Blob> blobs = new ArrayList<Blob>();
 
-        Point[] crossingLine = new Point[2];
+
 
         cap.read(imgFrame1);
         cap.read(imgFrame2);
 
 
 
+
+
         Long intHorizontalLinePosition = Math.round((double)Double.valueOf(position));
+        this.linePosition = intHorizontalLinePosition;
+        /*Long intHorizontalLinePosition2 = Math.round((double)Double.valueOf(position2));
+        this.linePosition2 = intHorizontalLinePosition2;*/
+
+        frameCols = imgFrame1.cols();
+        frameRows = imgFrame1.rows();
 
         Point p11 = null,p12= null ;
         if(orientation.equals("horizontal")){
@@ -115,7 +162,6 @@ public class CarCounter {
 
         crossingLine[0] = p11;
         crossingLine[1] = p12;
-
 
         int frameCount = 2;
 
@@ -178,6 +224,7 @@ public class CarCounter {
             }
 
 
+
             int id = 0;
 
             for (MatOfPoint ch : contours) {
@@ -205,19 +252,28 @@ public class CarCounter {
 
             imgFrame2Copy = imgFrame2.clone();          // get another copy of frame 2 since we changed the previous frame 2 copy in the processing above
 
-            drawBlobInfoOnImage(blobs, imgFrame2Copy);
 
-            boolean blnAtLeastOneBlobCrossedTheLine = checkIfBlobsCrossedTheLine(blobs, intHorizontalLinePosition.intValue(),orientation,true);
+            boolean blnAtLeastOneBlobCrossedTheLine = checkIfBlobsCrossedTheLine(blobs, linePosition, true,imgFrame2Copy);
             if (blnAtLeastOneBlobCrossedTheLine == true) {
                 Core.line(imgFrame2Copy, crossingLine[0], crossingLine[1], SCALAR_GREEN, 2);
+
             }
             else {
                 Core.line(imgFrame2Copy, crossingLine[0], crossingLine[1], SCALAR_RED, 2);
             }
 
             drawCarCountOnImage(carCount, imgFrame2Copy);
+            int intFontFace = Core.FONT_HERSHEY_SIMPLEX;
+            double dblFontScale = 1;
+            int intFontThickness = (int)Math.round(dblFontScale * 2.0);
+            Core.putText(imgFrame2Copy,stopwatch.toString(),new Point(50,70),intFontFace,dblFontScale,SCALAR_GREEN,intFontThickness);
+            Core.putText(imgFrame2Copy,Integer.toString(frameCount),new Point(200,70),intFontFace,dblFontScale,SCALAR_GREEN,intFontThickness);
 
             image = toBufferedImage(imgFrame2Copy);
+
+
+
+
 
             //cv::waitKey(0);                 // uncomment this line to go frame by frame for debugging
 
@@ -335,53 +391,24 @@ public class CarCounter {
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    private void drawAndShowContours(Size imageSize, List<MatOfPoint > contours, String strImageName) {
-        Mat image = new Mat(imageSize, CvType.CV_8UC3, SCALAR_BLACK);
+    private void calculateSpeed(Blob blob, Mat frame){
+        int width = blob.currentBoundingRect.width;
 
-        Imgproc.drawContours(image, contours, -1, SCALAR_WHITE, -1);
-
-        JFrame frame = new JFrame();
-        frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-        JPanel panel = new JPanel();
-        JLabel label = new JLabel();
-        frame.getContentPane().add(panel);
-        panel.add(label);
-        frame.setVisible(true);
-        frame.pack();
-
-        label.setIcon(new ImageIcon(toBufferedImage(image)));
-
-    }
-
-    ///////////////////////////////////////////////////////////////////////////////////////////////////
-    private void drawAndShowContoursBlob(Size imageSize, List<Blob> blobs, String strImageName) {
-
-        Mat image = new Mat(imageSize, CvType.CV_8UC3, SCALAR_BLACK);
-
-        List<MatOfPoint>  contours = new ArrayList<MatOfPoint>();
-
-        for (Blob blob : blobs) {
-            if (blob.blnStillBeingTracked == true) {
-                contours.add(blob.currentContour);
-            }
+        //(WxF)/P
+        double distance = (avgRealWidth * focalLength ) / width;
+        if(blob.prevDistance != 0) {
+            double delta = Math.abs(distance - blob.prevDistance);
+            double speed = delta  * 3.6 * fps ;
+            blob.setSpeed(new BigDecimal(speed));
+            blob.prevDistance = distance;
+        }else{
+            blob.prevDistance = distance;
         }
-
-        Imgproc.drawContours(image, contours, -1, SCALAR_WHITE, -1);
-
-        JFrame frame = new JFrame();
-        frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
-        JPanel panel = new JPanel();
-        JLabel label = new JLabel();
-        frame.getContentPane().add(panel);
-        panel.add(label);
-        frame.setVisible(true);
-        frame.pack();
-
-        label.setIcon(new ImageIcon(toBufferedImage(image)));
+        //drawBlobInfoOnImage(blob, frame);
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-    private boolean checkIfBlobsCrossedTheLine(List<Blob> blobs, int intHorizontalLinePosition,String orientation,boolean doCount) {
+    private boolean checkIfBlobsCrossedTheLine(List<Blob> blobs,double linePosition, boolean doCount, Mat frame) {
         boolean blnAtLeastOneBlobCrossedTheLine = false;
 
         for (Blob blob : blobs) {
@@ -390,30 +417,33 @@ public class CarCounter {
                 int prevFrameIndex = (int)blob.centerPositions.size() - 2;
                 int currFrameIndex = (int)blob.centerPositions.size() - 1;
 
+                calculateSpeed(blob,frame);
+
                 if(orientation.equals("vertical")){
                     //if(movement.equals("decreasing")) {
-                        if (blob.centerPositions.get(prevFrameIndex).x > intHorizontalLinePosition && blob.centerPositions.get(currFrameIndex).x <= intHorizontalLinePosition) {
-                            blnAtLeastOneBlobCrossedTheLine = count(blob.id,doCount);
-                            carCountByMovement.put("decreasing",carCountByMovement.get("decreasing")+1);
+                        if (blob.centerPositions.get(prevFrameIndex).x > linePosition && blob.centerPositions.get(currFrameIndex).x <= linePosition) {
+                            String movement = "decreasing";
+                            blnAtLeastOneBlobCrossedTheLine = handleLineCrossing(doCount, blob, currFrameIndex, movement,frame);
                         }
                     //}else if (movement.equals("increasing")){
-                        if (blob.centerPositions.get(prevFrameIndex).x < intHorizontalLinePosition && blob.centerPositions.get(currFrameIndex).x >= intHorizontalLinePosition) {
-                            blnAtLeastOneBlobCrossedTheLine = count(blob.id,doCount);
-                            carCountByMovement.put("increasing",carCountByMovement.get("increasing")+1);
+                        if (blob.centerPositions.get(prevFrameIndex).x < linePosition && blob.centerPositions.get(currFrameIndex).x >= linePosition) {
+                            String movement = "increasing";
+                            blnAtLeastOneBlobCrossedTheLine = handleLineCrossing(doCount, blob, currFrameIndex, movement,frame);
                         }
                     //}
                 }else if(orientation.equals("horizontal")) {
                     //if(movement.equals("increasing")) {
-                        if (blob.centerPositions.get(prevFrameIndex).y > intHorizontalLinePosition && blob.centerPositions.get(currFrameIndex).y <= intHorizontalLinePosition) {
-                            blnAtLeastOneBlobCrossedTheLine = count(blob.id,doCount);
-                            carCountByMovement.put("increasing",carCountByMovement.get("increasing")+1);
+                        if (blob.centerPositions.get(prevFrameIndex).y > linePosition && blob.centerPositions.get(currFrameIndex).y <= linePosition) {
+                            String movement = "increasing";
+                            blnAtLeastOneBlobCrossedTheLine = handleLineCrossing(doCount, blob, currFrameIndex, movement,frame);
                         }
                     //}else if (movement.equals("decreasing")){
-                        if (blob.centerPositions.get(prevFrameIndex).y < intHorizontalLinePosition && blob.centerPositions.get(currFrameIndex).y >= intHorizontalLinePosition) {
-                            blnAtLeastOneBlobCrossedTheLine = count(blob.id,doCount);
-                            carCountByMovement.put("decreasing",carCountByMovement.get("decreasing")+1);
+                        if (blob.centerPositions.get(prevFrameIndex).y < linePosition && blob.centerPositions.get(currFrameIndex).y >= linePosition) {
+                            String movement = "decreasing";
+                            blnAtLeastOneBlobCrossedTheLine = handleLineCrossing(doCount, blob, currFrameIndex, movement,frame);
                         }
                     //}
+
                 }
             }
 
@@ -422,38 +452,60 @@ public class CarCounter {
         return blnAtLeastOneBlobCrossedTheLine;
     }
 
+    private boolean handleLineCrossing(boolean doCount, Blob blob, int currFrameIndex, String movement, Mat frame) {
+        boolean blnAtLeastOneBlobCrossedTheLine;
+        blnAtLeastOneBlobCrossedTheLine = count(blob.id,doCount);
+        carCountByMovement.put(movement,carCountByMovement.get(movement)+1);
+        writeImage(blob,frame);
+        return blnAtLeastOneBlobCrossedTheLine;
+    }
+
+    private void writeImage(Blob blob,Mat frame){
+        if(blob != null && blob.currentContour != null){
+            Rect rect = blob.currentBoundingRect;
+            Mat roi = frame.submat(rect);
+            notifyObservers((BufferedImage)toBufferedImage(roi));
+        }
+
+    }
+
     private Map<Integer,Long> timesPerBlob = new HashMap<Integer,Long>();
     private long time = 1l;
 
     private boolean count(int blobId,boolean doCount) {
         boolean blnAtLeastOneBlobCrossedTheLine = true;;
-        if(doCount) {
+        if(!doCount) {
             carCount++;
             long start = System.currentTimeMillis();
             timesPerBlob.put(blobId,start);
         }else{
             long end = System.currentTimeMillis();
-            time = end - timesPerBlob.get(blobId);
+            if(timesPerBlob.get(blobId) != null){
+                time = end - timesPerBlob.get(blobId);
+                timesPerBlob.put(blobId,time);
+            }
+
         }
 
         return blnAtLeastOneBlobCrossedTheLine;
     }
 
+
     ///////////////////////////////////////////////////////////////////////////////////////////////////
-     void drawBlobInfoOnImage(List<Blob> blobs, Mat imgFrame2Copy) {
+     void drawBlobInfoOnImage(Blob blob, Mat imgFrame2Copy) {
 
-        for (int i = 0; i < blobs.size(); i++) {
 
-            if (blobs.get(i).blnStillBeingTracked == true) {
+            if (blob.blnStillBeingTracked == true) {
                 //Core.rectangle(imgFrame2Copy, blobs.get(i).currentBoundingRect.br(), blobs.get(i).currentBoundingRect.tl(), SCALAR_RED, 2);
 
                 int intFontFace = Core.FONT_HERSHEY_SIMPLEX;
-                double dblFontScale = blobs.get(i).dblCurrentDiagonalSize / 60.0;
-                int intFontThickness = (int)Math.round(dblFontScale * 1.0);
+                double dblFontScale = blob.dblCurrentDiagonalSize / 200.0;
+                int intFontThickness = (int)Math.round(dblFontScale * 2.0);
 
-                //Core.putText(imgFrame2Copy, String.valueOf(i), blobs.get(i).centerPositions.get(blobs.get(i).centerPositions.size()-1), intFontFace, dblFontScale, SCALAR_GREEN, intFontThickness);
+                if(blob.getSpeed() != null) {
+                    Core.putText(imgFrame2Copy, blob.getSpeed().setScale(2,BigDecimal.ROUND_HALF_UP).toString()+" km/h", blob.currentBoundingRect.tl(), intFontFace, dblFontScale, SCALAR_GREEN, intFontThickness);
+                }
             }
-        }
     }
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -484,4 +536,50 @@ public class CarCounter {
 
     }
 
+    public void setCrossingLine(int y, int id){
+        if(id == 1) {
+            Point p11 = crossingLine[0];
+            Point p12 = crossingLine[1];
+            linePosition = y;
+            if (orientation.equals("horizontal")) {
+                p11 = new Point(0, linePosition);
+                p12 = new Point(frameCols, linePosition);
+            } else if (orientation.equals("vertical")) {
+                p11 = new Point(linePosition, 0);
+                p12 = new Point(linePosition, frameRows);
+            }
+            crossingLine[0] = p11;
+            crossingLine[1] = p12;
+        }
+    }
+
+    public void setOrientation(String orientation){
+        this.orientation = orientation;
+        Point p11 = crossingLine[0];
+        Point p12 = crossingLine[1];
+
+        if(orientation.equals("horizontal")){
+            p11 = new Point(0, linePosition);
+            p12 = new Point(frameCols, linePosition);
+        }else if (orientation.equals("vertical")){
+            p11 = new Point(linePosition,0);
+            p12 = new Point(linePosition,frameRows);
+        }
+        crossingLine[0] = p11;
+        crossingLine[1] = p12;
+    }
+
+    List<Observer> observers = new ArrayList<Observer>();
+
+    @Override
+    public void registerObserver(Observer observer) {
+        observers.add(observer);
+    }
+
+    @Override
+    public void notifyObservers(Image i) {
+        for(Observer o : observers){
+            o.update(i);
+        }
+    }
 }

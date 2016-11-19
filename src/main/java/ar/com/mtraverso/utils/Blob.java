@@ -5,6 +5,7 @@ import org.opencv.core.Point;
 import org.opencv.core.Rect;
 import org.opencv.imgproc.Imgproc;
 
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Vector;
@@ -15,6 +16,7 @@ import java.util.Vector;
 public class Blob {
 
     public MatOfPoint currentContour;
+    public double prevDistance;
 
     public Rect currentBoundingRect;
 
@@ -33,6 +35,35 @@ public class Blob {
 
     public int id;
 
+    public BigDecimal speed;
+
+    public int frameFirstLine;
+    public int frameSecondLine;
+
+
+    public int getFrameFirstLine() {
+        return frameFirstLine;
+    }
+
+    public void setFrameFirstLine(int frameFirstLine) {
+        this.frameFirstLine = frameFirstLine;
+    }
+
+    public int getFrameSecondLine() {
+        return frameSecondLine;
+    }
+
+    public void setFrameSecondLine(int frameSecondLine) {
+        this.frameSecondLine = frameSecondLine;
+    }
+
+    public BigDecimal getSpeed() {
+        return speed;
+    }
+
+    public void setSpeed(BigDecimal speed) {
+        this.speed = speed;
+    }
 
     public Blob(MatOfPoint contour, int id){
         this.id = id;

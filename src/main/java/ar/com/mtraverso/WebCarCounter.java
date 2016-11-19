@@ -24,14 +24,16 @@ public class WebCarCounter {
     boolean runningIcon;
     String videoName;
     String position;
+    double focalLength;
     String orientation;
+    int fps;
     CarCounter counter;
 
     Runnable capture = new Runnable() {
         public void run() {
             try {
                 System.out.println("Start capture");
-                counter.initCapture(videoName, orientation, position);
+                counter.initCapture(videoName, orientation, position,focalLength, fps);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -58,6 +60,8 @@ public class WebCarCounter {
         videoName = prop.getProperty("video.filename");
         position = prop.getProperty("line.position");
         orientation = prop.getProperty("line.orientation");
+        focalLength = Integer.valueOf(prop.getProperty("camera.focal.length"));
+        fps = Integer.valueOf(prop.getProperty("camera.frames.per.second"));
         boolean repeat;
 
         try{
@@ -67,7 +71,7 @@ public class WebCarCounter {
             repeat = true;
         }
 
-        counter = new CarCounter(repeat);
+        counter = CarCounter.getInstance(repeat);
         counter.setRunning(true);
 
         counter.setCarCount(0);
